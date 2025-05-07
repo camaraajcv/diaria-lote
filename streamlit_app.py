@@ -70,6 +70,13 @@ def generate_txt_file(tipo_operacao, inicio_direito, fim_direito, num_parcelas, 
     if num_parcelas == "":
         num_parcelas = " " * 2
 
+    tipo_operacao = tipo_operacao.split(" ")[0]
+    inicio_direito = inicio_direito.zfill(6)
+    fim_direito = fim_direito.zfill(6)
+    documento = documento[:15].ljust(15)
+
+    contador_por_cpf = {}
+
     txt_content = ""
     contador_por_cpf = defaultdict(int)
 
