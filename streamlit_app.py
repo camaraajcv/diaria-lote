@@ -1,151 +1,121 @@
 import streamlit as st
 import pandas as pd
-import math
-from pathlib import Path
+from collections import defaultdict
+import io
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+def main():
+    # URL da imagem
+    image_url = "https://github.com/camaraajcv/sigpp-lote/blob/main/logoSIGRH_Cabecalho.png?raw=true"
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+    # Exibir imagem e textos
+    html_code = f'<div style="display: flex; justify-content: center;"><img src="{image_url}" alt="Imagem" style="width:32vw;"/></div>'
+    st.markdown(html_code, unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; font-size: 1.5em;'>DIRETORIA DE ADMINISTRAÇÃO DA AERONÁUTICA</h1>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; font-size: 1.2em;'>SUBDIRETORIA DE PAGAMENTO DE PESSOAL</h2>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; font-size: 1em; text-decoration: underline;'>SIGPP</h3>", unsafe_allow_html=True)
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+    # Instruções
+    st.write("Realizando carga de lançamentos financeiros no SIGPP")
+    st.markdown("<b>A Tabela Excel deverá ter 5 COLUNAS:</b>", unsafe_allow_html=True)
+    st.markdown("- <b>1ª</b> - Matrícula com Vínculo (sem pontos ou dígitos)", unsafe_allow_html=True)
+    st.markdown("- <b>2ª</b> - CPF (11 dígitos, sem formatação)", unsafe_allow_html=True)
+    st.markdown("- <b>3ª</b> - RUBRICA (6 dígitos)", unsafe_allow_html=True)
+    st.markdown("- <b>4ª</b> - VALOR ou ÍNDICE", unsafe_allow_html=True)
+    st.markdown("- <b>5ª</b> - TEXTO a ser inserido no XML (um para cada linha)", unsafe_allow_html=True)
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    # Upload do arquivo
+    uploaded_file = st.file_uploader("Faça upload do arquivo Excel", type=["xlsx", "xls"])
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    if uploaded_file is not None:
+        try:
+            df = pd.read_excel(uploaded_file, header=None)
+        except Exception as e:
+            st.error(f"Erro ao ler o arquivo Excel: {e}")
+            return
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+        if len(df.columns) == 5:
+            df.columns = ['Saram_vinculo', 'CPF', 'RUBRICA', 'VALOR', 'TEXTO_XML']
+            df['Saram_vinculo'] = df['Saram_vinculo'].apply(lambda x: str(int(x)).zfill(10) if pd.notnull(x) else "")
+            df['CPF'] = df['CPF'].astype(str).str.zfill(11)
+            df['RUBRICA'] = df['RUBRICA'].astype(str).str.zfill(6)
+        else:
+            st.error("Erro: O arquivo Excel deve ter exatamente 5 colunas.")
+            return
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+        st.write("Pré-visualização dos dados:")
+        st.write(df)
+
+        # Formulário
+        st.header("Informações Adicionais")
+        col1, col2 = st.columns(2)
+        with col1:
+            tipo_operacao = st.selectbox("Tipo de Operação", ["I - Inclusão", "A - Alteração", "E - Exclusão", "F - Finalização"])
+            inicio_direito = st.text_input("Início do Direito (AAAAMM)", max_chars=6)
+            fim_direito = st.text_input("Data Final do Direito (AAAAMM)", max_chars=6)
+        with col2:
+            num_parcelas = st.text_input("Número de Parcelas (dois dígitos)", max_chars=2)
+            valor_coluna = st.selectbox("O Valor da Planilha é um:", ["Índice", "Valor"])
+            documento = st.text_input("Documento (15 dígitos)", max_chars=15)
+
+        if inicio_direito:
+            if st.button("Gerar Arquivo .txt"):
+                generate_txt_file(tipo_operacao, inicio_direito, fim_direito, num_parcelas, valor_coluna, documento, df)
+        else:
+            st.error("Por favor, preencha o campo 'Início do Direito' antes de gerar o arquivo .txt.")
+
+
+def generate_txt_file(tipo_operacao, inicio_direito, fim_direito, num_parcelas, valor_coluna, documento, df):
+    if fim_direito == "":
+        fim_direito = " " * 6
+    if num_parcelas == "":
+        num_parcelas = " " * 2
+
+    txt_content = ""
+    contador_por_cpf = defaultdict(int)
+
+    for _, row in df.iterrows():
+        cpf = row['CPF']
+        contador_por_cpf[cpf] += 1
+        sequencial_rubrica = str(contador_por_cpf[cpf]).zfill(2)
+
+        if valor_coluna == "Índice":
+            valor_formatado = '{:.4f}'.format(row["VALOR"])
+            valor_indice = valor_formatado.replace('.', '').zfill(10)
+            valor_lancamento = " " * 9
+        else:
+            valor_lancamento = '{:09.2f}'.format(row["VALOR"]).replace('.', '').zfill(9)
+            valor_indice = " " * 10
+
+        tipo_operacao_code = tipo_operacao.split(" ")[0]
+        linha_txt = (
+            f"{tipo_operacao_code}1010"
+            f"{inicio_direito.zfill(6)}"
+            f"{fim_direito.zfill(6)}"
+            f"{row['Saram_vinculo']}"
+            f"{cpf}"
+            f"{row['RUBRICA']}"
+            f"{sequencial_rubrica}"
+            f"{num_parcelas}"
+            f"{valor_indice}"
+            f"{valor_lancamento}"
+            f"{documento.strip().ljust(15)}"
+            f"{row['TEXTO_XML']}\n"
+        )
+
+        txt_content += linha_txt
+
+    txt_file = io.StringIO()
+    txt_file.write(txt_content)
+
+    st.download_button(
+        label="Clique para baixar o arquivo .txt",
+        data=txt_file.getvalue(),
+        file_name="dados.txt",
+        mime="text/plain"
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
+    st.success("Arquivo .txt gerado e disponível para download!")
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+if __name__ == "__main__":
+    main()
