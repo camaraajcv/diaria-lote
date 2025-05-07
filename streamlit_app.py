@@ -37,7 +37,7 @@ def main():
             df.columns = ['Saram_vinculo', 'CPF', 'RUBRICA', 'VALOR', 'TEXTO_XML']
             df['Saram_vinculo'] = df['Saram_vinculo'].apply(lambda x: str(int(x)).zfill(10) if pd.notnull(x) else "")
             df['CPF'] = df['CPF'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(11)
-            df['RUBRICA'] = df['RUBRICA'].astype(str).str.replace(r'\D', '', regex=True).str.zfill(6)
+            df['RUBRICA'] = df['RUBRICA'].apply(lambda x: str(int(float(x))).zfill(6) if pd.notnull(x) else '')
         else:
             st.error("Erro: O arquivo Excel deve ter exatamente 5 colunas.")
             return
