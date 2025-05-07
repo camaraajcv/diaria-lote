@@ -73,7 +73,7 @@ def generate_txt_file(tipo_operacao, inicio_direito, fim_direito, num_parcelas, 
     tipo_operacao = tipo_operacao.split(" ")[0]
     inicio_direito = inicio_direito.zfill(6)
     fim_direito = fim_direito.zfill(6)
-    documento = documento[:15].ljust(15)
+    documento_valor = str(row['XML_TEXTO'])[:15].ljust(15)
 
     contador_por_cpf = {}
 
@@ -95,21 +95,20 @@ def generate_txt_file(tipo_operacao, inicio_direito, fim_direito, num_parcelas, 
 
         tipo_operacao_code = tipo_operacao.split(" ")[0]
         linha_txt = (
-            f"{tipo_operacao_code}1010"
-            f"{inicio_direito.zfill(6)}"
-            f"{fim_direito.zfill(6)}"
-            f"{row['Saram_vinculo']}"
-            f"{cpf}"
-            f"{row['RUBRICA']}"
-            f"{sequencial_rubrica}"
-            f"{num_parcelas}"
-            f"{valor_indice}"
-            f"{valor_lancamento}"
-            f"{documento.strip().ljust(15)}"
-            f"{row['TEXTO_XML']}\n"
-        )
+    f"{tipo_operacao_code}1010"
+    f"{inicio_direito.zfill(6)}"
+    f"{fim_direito.zfill(6)}"
+    f"{row['Saram_vinculo']}"
+    f"{cpf}"
+    f"{row['RUBRICA']}"
+    f"{sequencial_rubrica}"
+    f"{num_parcelas}"
+    f"{valor_indice}"
+    f"{valor_lancamento}"
+    f"{documento_valor}\n"
+)
 
-        txt_content += linha_txt
+    txt_content += linha_txt
 
     txt_file = io.StringIO()
     txt_file.write(txt_content)
